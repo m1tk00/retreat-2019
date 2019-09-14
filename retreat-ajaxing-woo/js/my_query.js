@@ -9,7 +9,7 @@
 						_wpnonce: ajax_object._wpnonce,
 					},
 					success: function (data) {
-						alert( data );
+						// alert( data );
 					},
 				}
 			)

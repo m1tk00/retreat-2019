@@ -12,6 +12,9 @@ class Retreat_Ajaxing_Woo {
 		// Logged out users.
 		add_action( 'wp_ajax_nopriv_sample_ajax_call', array( $this, 'nopriv_sample_ajax_call' ), 10 );
 		add_action( 'wp_ajax_nopriv_sample_ajax_call', 'wp_die', 20 );
+
+		add_action( 'woocommerce_add_to_cart_fragments', array( $this, 'update_menu_item' ) );
+		add_action( 'wp_footer', array( $this, 'display_cart_items' ) );
 	}
 
 	public function register_my_script() {
@@ -45,6 +48,29 @@ class Retreat_Ajaxing_Woo {
 			echo 'not logged in';
 		}
 	}
+
+	public function update_menu_item( $fragments ) {
+		$fragments['.refresh_this_item'] = $this->update_cart_items();
+		return $fragments;
+	}
+
+	protected function update_cart_items(){
+		ob_start();
+		?>
+		<div class="refresh_this_item">
+			<?php if( WC()->cart->get_cart_total() ) { ?>
+				Cart Total:
+				<strong><?php echo WC()->cart->get_cart_total(); ?></strong>
+			<?php } ?>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	public function display_cart_items(){
+		echo $this->update_cart_items();
+	}
+
 }
 
 return new Retreat_Ajaxing_Woo();

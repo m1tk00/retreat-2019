@@ -7,6 +7,9 @@ class Retreat_Ajaxing_Woo {
 		add_action( 'init', array( $this, 'register_my_script' ) );
 
 		// Logged in users.
+		add_action( 'wp_ajax_simple_add_to_cart', array( $this, 'add_to_cart' ), 10 );
+		add_action( 'wp_ajax_nopriv_simple_add_to_cart', array( $this, 'add_to_cart' ), 10 );
+
 		add_action( 'wp_ajax_sample_ajax_call', array( $this, 'sample_ajax_call' ), 10 );
 		add_action( 'wp_ajax_sample_ajax_call', 'wp_die', 20 );
 		// Logged out users.
@@ -15,6 +18,7 @@ class Retreat_Ajaxing_Woo {
 
 		add_action( 'woocommerce_add_to_cart_fragments', array( $this, 'update_menu_item' ) );
 		add_action( 'wp_footer', array( $this, 'display_cart_items' ) );
+		add_action( 'woocommerce_after_add_to_cart_button', array( $this, 'add_add_to_cart_for_simple' ) );
 	}
 
 	public function register_my_script() {
@@ -69,6 +73,29 @@ class Retreat_Ajaxing_Woo {
 
 	public function display_cart_items() {
 		echo $this->update_cart_items();
+	}
+
+	public function add_to_cart() {
+		$notices = WC()->session->get('wc_notices', array() );
+		if( ! empty( $notices['error'] ) ) {
+			// it has error adding to cart.
+			echo 'not added to cart.';
+		} else {
+			echo 'added to cart.';
+		}
+		wp_die();
+	}
+
+	public function add_add_to_cart_for_simple( ) {
+		global $product;
+		if( $product->get_type() === 'simple') {
+			?>
+		    <input type="hidden" name="add-to-cart" value="<?php echo $product->get_id();?>"/>
+			<?php
+		}
+		?>
+	    <input type="hidden" name="action" value="simple_add_to_cart"/>
+		<?php
 	}
 
 }

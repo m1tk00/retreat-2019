@@ -54,11 +54,11 @@ class Retreat_Ajaxing_Woo {
 		return $fragments;
 	}
 
-	protected function update_cart_items(){
+	protected function update_cart_items() {
 		ob_start();
 		?>
 		<div class="refresh_this_item">
-			<?php if( WC()->cart->get_cart_total() ) { ?>
+			<?php if ( WC()->cart->get_cart_total() ) { ?>
 				Cart Total:
 				<strong><?php echo WC()->cart->get_cart_total(); ?></strong>
 			<?php } ?>
@@ -67,7 +67,7 @@ class Retreat_Ajaxing_Woo {
 		return ob_get_clean();
 	}
 
-	public function display_cart_items(){
+	public function display_cart_items() {
 		echo $this->update_cart_items();
 	}
 

@@ -18,6 +18,7 @@ class Retreat_Ajaxing_Woo {
 
 		add_action( 'woocommerce_add_to_cart_fragments', array( $this, 'update_menu_item' ) );
 		add_action( 'wp_footer', array( $this, 'display_cart_items' ) );
+		add_action( 'woocommerce_after_cart_table', array( $this, 'display_cart_items' ) );
 		add_action( 'woocommerce_after_add_to_cart_button', array( $this, 'add_add_to_cart_for_simple' ) );
 	}
 

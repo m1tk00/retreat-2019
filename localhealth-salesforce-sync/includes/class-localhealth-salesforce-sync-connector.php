@@ -34,7 +34,6 @@ class Localhealth_Salesforce_Sync_Connector {
 
 			);
 		}
-		echo wp_json_encode( $data ) . '<br>';
 		$response = wp_remote_post(
 			$url,
 			array(
@@ -64,48 +63,50 @@ class Localhealth_Salesforce_Sync_Connector {
 	 * @return string The contact ID.
 	 */
 	protected function prepare_contact( $api_data ) {
-		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$api_data['dob']} and FirstName = '{$api_data['first_name']}' and LastName = '{$api_data['last_name']}'";
+		$dob = date( 'Y-m-d', strtotime( $api_data['dob'] ) );
+		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['first_name']}' and LastName = '{$api_data['last_name']}'";
 		$contact_id = get_option( 'contact_' . md5( $query ), 0 );
+		$contact    = array(
+			'Birthdate'                 => $api_data['dob'],
+			'Email'                     => $api_data['patient_email'],
+			'Family_Email__c'           => $api_data['family_email'],
+			'Family_Remark__c'          => $api_data['family_remark'],
+			'Gender__c'                 => $api_data['gender'],
+			'Phone'                     => $api_data['home_phone'],
+			'Is_Active__c'              => $api_data['is_active'],
+			'Is_Deceased__c'            => $api_data['is_deceased'],
+			'Is_Pet__c'                 => $api_data['is_pet'],
+			'Language__c'               => $api_data['language'],
+			'MobilePhone'               => $api_data['cell_phone'],
+			'Nursing_Home__c'           => $api_data['nursing_home'],
+			'Patient_Group__c'          => $api_data['patient_group'],
+			'Patient_Remark__c'         => $api_data['patient_remark'],
+			'Patient_Short_Remark__c'   => $api_data['patient_short_remark'],
+			'Pharmacy_Number__c'        => $api_data['PharmacyNumber'],
+			'Social_Security_Number__c' => $api_data['social_security_number'],
+			'Transaction_Action__c'     => $api_data['transaction_action'],
+			'Transaction_Date__c'       => $api_data['transaction_date'],
+			'Transaction_Time__c'       => $api_data['transaction_time'],
+			'Unique_Patient_ID__c'      => $api_data['unique_patient_id'],
+			'LastName'                  => $api_data['last_name'],
+			'MiddleName'                => $api_data['middle_name'],
+			'FirstName'                 => $api_data['first_name'],
+			'Salutation'                => $api_data['name_prefix'],
+			'Suffix'                    => $api_data['name_suffix'],
+			'MailingStreet'             => $api_data['address1'],
+			'Mailing_Apartment_Unit__c' => $api_data['address2'],
+			'MailingCity'               => $api_data['city'],
+			'State__c'                  => $api_data['state'],
+			'MailingState'              => $api_data['state'],
+			'MailingPostalCode'         => $api_data['zipcode'],
+			'Work_Phone__c'             => $api_data['work_phone'],
+		);
 		if ( ! $contact_id ) {
 			$results = $this->sf->get_query( $query );
 			if ( $results['totalSize'] ) {
 				$contact_id = $results['records'][0]['Id'];
+				$this->sf->update_lead( 'Contact', $contact_id, $contact );
 			} else {
-				$contact    = array(
-					'Birthdate'                 => $api_data['dob'],
-					'Email'                     => $api_data['patient_email'],
-					'Family_Email__c'           => $api_data['family_email'],
-					'Family_Remark__c'          => $api_data['family_remark'],
-					'Gender__c'                 => $api_data['gender'],
-					'Phone'                     => $api_data['home_phone'],
-					'Is_Active__c'              => $api_data['is_active'],
-					'Is_Deceased__c'            => $api_data['is_deceased'],
-					'Is_Pet__c'                 => $api_data['is_pet'],
-					'Language__c'               => $api_data['language'],
-					'MobilePhone'               => $api_data['cell_phone'],
-					'Nursing_Home__c'           => $api_data['nursing_home'],
-					'Patient_Group__c'          => $api_data['patient_group'],
-					'Patient_Remark__c'         => $api_data['patient_remark'],
-					'Patient_Short_Remark__c'   => $api_data['patient_short_remark'],
-					'Pharmacy_Number__c'        => $api_data['PharmacyNumber'],
-					'Social_Security_Number__c' => $api_data['social_security_number'],
-					'Transaction_Action__c'     => $api_data['transaction_action'],
-					'Transaction_Date__c'       => $api_data['transaction_date'],
-					'Transaction_Time__c'       => $api_data['transaction_time'],
-					'Unique_Patient_ID__c'      => $api_data['unique_patient_id'],
-					'LastName'                  => $api_data['last_name'],
-					'MiddleName'                => $api_data['middle_name'],
-					'FirstName'                 => $api_data['first_name'],
-					'Salutation'                => $api_data['name_prefix'],
-					'Suffix'                    => $api_data['name_suffix'],
-					'MailingStreet'             => $api_data['address1'],
-					'Mailing_Apartment_Unit__c' => $api_data['address2'],
-					'MailingCity'               => $api_data['city'],
-					'State__c'                  => $api_data['state'],
-					'MailingState'              => $api_data['state'],
-					'MailingPostalCode'         => $api_data['zipcode'],
-					'Work_Phone__c'             => $api_data['work_phone'],
-				);
 				$contact_id = $this->sf->create_record( 'Contact', $contact );
 			}
 			update_option( 'contact_' . md5( $query ), $contact_id );
@@ -158,17 +159,27 @@ class Localhealth_Salesforce_Sync_Connector {
 	 * @return string
 	 * @throws \bjsmasth\Salesforce\Exception\SalesforceAuthentication
 	 */
-	public function process_patient( $api_data ) {
+	public function process_patient( $api_data, $time = 0 ) {
 
 		$store_data = $this->validate_store( $api_data );
 		if ( 0 === $store_data ) {
 			return '';
 		}
 		$this->prepare_sf();
+		try {
+			$contact_id = $this->prepare_contact( $api_data );
+			$this->prepare_insurance( $contact_id, $api_data );
+			return $contact_id;
+		} catch ( Exception $e ) {
+			if ( false !== strpos( $e->getMessage(), 'entity is deleted' ) && $time === 0 ) {
+				$dob = date( 'Y-m-d', strtotime( $api_data['dob'] ) );
+				$query = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['first_name']}' and LastName = '{$api_data['last_name']}'";
+				update_option( 'contact_' . md5( $query ), 0 );
+				return $this->process_patient( $api_data, 1 );
+			}
+			return $e->getMessage();
+		}
 
-		$contact_id = $this->prepare_contact( $api_data );
-		$this->prepare_insurance( $contact_id, $api_data );
-		return $contact_id;
 	}
 
 	/**
@@ -178,20 +189,29 @@ class Localhealth_Salesforce_Sync_Connector {
 	 * @return string
 	 * @throws \bjsmasth\Salesforce\Exception\SalesforceAuthentication
 	 */
-	public function process_prescription( $api_data ) {
+	public function process_prescription( $api_data, $time = 0 ) {
 
 		$store_data = $this->validate_store( $api_data );
 		if ( 0 === $store_data ) {
 			return '';
 		}
-
-		$this->prepare_sf();
-		$contact_id      = $this->get_patient_contact( $api_data );
-		$prescription_id = $this->insert_prescription( $api_data, $contact_id );
-		$this->insert_payers( $prescription_id, $api_data );
-		$this->insert_dosage( $prescription_id, $api_data );
-		$this->insert_diagnosis( $prescription_id, $api_data );
-		return $prescription_id;
+		try {
+			$this->prepare_sf();
+			$contact_id      = $this->get_patient_contact( $api_data );
+			$prescription_id = $this->insert_prescription( $api_data, $contact_id );
+			$this->insert_payers( $prescription_id, $api_data );
+			$this->insert_dosage( $prescription_id, $api_data );
+			$this->insert_diagnosis( $prescription_id, $api_data );
+			return $prescription_id;
+		} catch ( Exception $e ) {
+			if ( false !== strpos( $e->getMessage(), 'entity is deleted' ) && $time === 0 ) {
+				$dob = date( 'Y-m-d', strtotime( $api_data['patient_dob'] ) );
+				$query = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['patient_first_name']}' and LastName = '{$api_data['patient_last_name']}'";
+				update_option( 'contact_' . md5( $query ), 0 );
+				return $this->process_prescription( $api_data, 1 );
+			}
+			return $e->getMessage();
+		}
 	}
 
 	/**
@@ -201,7 +221,7 @@ class Localhealth_Salesforce_Sync_Connector {
 	 * @return string The prescription ID.
 	 */
 	protected function insert_prescription( $api_data, $contact_id ) {
-		$sf_data = array(
+		$sf_data         = array(
 			'API_Key__c'                       => $api_data['APIKey'],
 			'Bill_Status__c'                   => $api_data['bill_status'],
 			'Bill_Status_Text__c'              => $api_data['bill_status_text'],
@@ -329,7 +349,21 @@ class Localhealth_Salesforce_Sync_Connector {
 			'Due_From_Insurance__c'            => $api_data['due_from_insurance'],
 			'Patient__c'                       => $contact_id,
 		);
-		return $this->sf->create_record( 'Prescription__c', $sf_data );
+		$query           = "SELECT Id FROM Prescription__c WHERE Patient__c = '{$contact_id}' and Rx_Number__c = '{$api_data['rx_remark']}' and Refill_Number__c = '{$api_data['refill_number']}'";
+		$prescription_id = get_option( 'prescription_' . md5( $query ), 0 );
+		if ( $prescription_id ) {
+			$this->sf->update_lead( 'Prescription__c', $prescription_id, $sf_data );
+		} else {
+			$results = $this->sf->get_query( $query );
+			if ( $results['totalSize'] ) {
+				$prescription_id = $results['records'][0]['Id'];
+				$this->sf->update_lead( 'Prescription__c', $prescription_id, $sf_data );
+			} else {
+				$prescription_id = $this->sf->create_record( 'Prescription__c', $sf_data );
+			}
+			update_option( 'prescription_' . md5( $query ), $prescription_id );
+		}
+		return $prescription_id;
 	}
 
 	/**
@@ -380,11 +414,16 @@ class Localhealth_Salesforce_Sync_Connector {
 	protected function insert_payers( $prescription_id, $api_data ) {
 		$object = 'Payer__c';
 		foreach ( $api_data['payers'] as $data ) {
-			$query = "select Id from Plan_BIN__c WHERE Name = '{$data['plan_bin']}'";
-			$plan_id = get_option( 'plan_' . md5( $query ), 0 );
+			$query   = "select Id from Plan_BIN__c WHERE Name = '{$data['plan_bin']}'";
+			$plan_id = get_option( 'new_plan_' . md5( $query ), 0 );
 			if ( 0 === $plan_id ) {
-				$plan_id = $this->sf->create_record( 'Plan_BIN__c', array( 'Name' => $data['plan_bin'] ) );
-				update_option( 'plan_' . md5( $query ), $plan_id );
+				$results = $this->sf->get_query( $query );
+				if ( $results['totalSize'] ) {
+					$plan_id = $results['records'][0]['Id'];
+				} else {
+					$plan_id = $this->sf->create_record( 'Plan_BIN__c', array( 'Name' => $data['plan_bin'] ) );
+				}
+				update_option( 'new_plan_' . md5( $query ), $plan_id );
 			}
 			$obj = array(
 				'Card_ID__c'                  => $data['card_id'],
@@ -419,7 +458,8 @@ class Localhealth_Salesforce_Sync_Connector {
 	 * @return mixed|void
 	 */
 	protected function get_patient_contact( $api_data ) {
-		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$api_data['patient_dob']} and FirstName = '{$api_data['patient_first_name']}' and LastName = '{$api_data['patient_last_name']}'";
+		$dob = date( 'Y-m-d', strtotime( $api_data['patient_dob'] ) );
+		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['patient_first_name']}' and LastName = '{$api_data['patient_last_name']}'";
 		$contact_id = get_option( 'contact_' . md5( $query ), 0 );
 		if ( ! $contact_id ) {
 			$results = $this->sf->get_query( $query );

@@ -26,7 +26,6 @@ class CRUD {
 				'client_secret' => '7B28487CF87494368EC34FBF77E9BCB0448FB7578066D646F06D70902BE00AC9',
 				'username'      => $salesforce_data['sf_username'],
 				'password'      => $salesforce_data['sf_password'] . $salesforce_data['sf_token'], // password+security token.
-				'sandbox'       => true,
 			];
 
 			$this->_salesforce = new Authentication\PasswordAuthentication( $options );

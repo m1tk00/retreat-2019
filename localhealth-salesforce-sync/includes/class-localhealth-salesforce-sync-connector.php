@@ -64,7 +64,9 @@ class Localhealth_Salesforce_Sync_Connector {
 	 */
 	protected function prepare_contact( $api_data ) {
 		$dob = date( 'Y-m-d', strtotime( $api_data['dob'] ) );
-		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['first_name']}' and LastName = '{$api_data['last_name']}'";
+		$fname = strtolower( $api_data['first_name'] );
+		$lname = strtolower( $api_data['last_name'] );
+		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$fname}' and LastName = '{$lname}'";
 		$contact_id = get_option( 'contact_' . md5( $query ), 0 );
 		$contact    = array(
 			'Birthdate'                 => $api_data['dob'],
@@ -109,7 +111,7 @@ class Localhealth_Salesforce_Sync_Connector {
 			} else {
 				$contact_id = $this->sf->create_record( 'Contact', $contact );
 			}
-			update_option( 'contact_' . md5( $query ), $contact_id );
+			update_option( 'contact_' . md5( $query ), $contact_id, 0 );
 		}
 		return $contact_id;
 	}
@@ -147,7 +149,7 @@ class Localhealth_Salesforce_Sync_Connector {
 					);
 					$plan      = $this->sf->create_record( $object, $plan_data );
 				}
-				update_option( 'insurance_' . md5( $query ), $plan );
+				update_option( 'insurance_' . md5( $query ), $plan, 0 );
 			}
 		}
 	}
@@ -173,8 +175,10 @@ class Localhealth_Salesforce_Sync_Connector {
 		} catch ( Exception $e ) {
 			if ( false !== strpos( $e->getMessage(), 'entity is deleted' ) && $time === 0 ) {
 				$dob = date( 'Y-m-d', strtotime( $api_data['dob'] ) );
-				$query = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['first_name']}' and LastName = '{$api_data['last_name']}'";
-				update_option( 'contact_' . md5( $query ), 0 );
+				$fname = strtolower( $api_data['first_name'] );
+				$lname = strtolower( $api_data['last_name'] );
+				$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$fname}' and LastName = '{$lname}'";
+				update_option( 'contact_' . md5( $query ), 0, 0 );
 				return $this->process_patient( $api_data, 1 );
 			}
 			return $e->getMessage();
@@ -206,8 +210,10 @@ class Localhealth_Salesforce_Sync_Connector {
 		} catch ( Exception $e ) {
 			if ( false !== strpos( $e->getMessage(), 'entity is deleted' ) && $time === 0 ) {
 				$dob = date( 'Y-m-d', strtotime( $api_data['patient_dob'] ) );
-				$query = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['patient_first_name']}' and LastName = '{$api_data['patient_last_name']}'";
-				update_option( 'contact_' . md5( $query ), 0 );
+				$fname = strtolower( $api_data['patient_first_name'] );
+				$lname = strtolower( $api_data['patient_last_name'] );
+				$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$fname}' and LastName = '{$lname}'";
+				update_option( 'contact_' . md5( $query ), 0, 0 );
 				return $this->process_prescription( $api_data, 1 );
 			}
 			return $e->getMessage();
@@ -361,7 +367,7 @@ class Localhealth_Salesforce_Sync_Connector {
 			} else {
 				$prescription_id = $this->sf->create_record( 'Prescription__c', $sf_data );
 			}
-			update_option( 'prescription_' . md5( $query ), $prescription_id );
+			update_option( 'prescription_' . md5( $query ), $prescription_id, 0 );
 		}
 		return $prescription_id;
 	}
@@ -375,6 +381,8 @@ class Localhealth_Salesforce_Sync_Connector {
 	protected function insert_dosage( $prescription_id, $api_data ) {
 		$object = 'Dosage__C';
 		foreach ( $api_data['dosage_info'] as $data ) {
+			$query  = "SELECT Id FROM Dosage__C WHERE Dosage_Days__c = '{$data['dose_days']}' AND Prescription__c = '{$prescription_id}'";
+			$dosage = $this->sf->get_query( $query );
 			$obj = array(
 				'Dosage_Days__c'     => $data['dose_days'],
 				'Dosage_Quantity__c' => $data['dose_qty'],
@@ -382,7 +390,13 @@ class Localhealth_Salesforce_Sync_Connector {
 				'Dosage_Time__c'     => $data['dose_time'],
 				'Prescription__c'    => $prescription_id,
 			);
-			$this->sf->create_record( $object, $obj );
+			if (  $dosage['totalSize'] ) {
+				unset( $obj['Prescription__c'] );
+				unset( $obj['Dosage_Days__c'] );
+				$this->sf->update_lead( $object, $dosage['records'][0]['Id'], $obj );
+			} else {
+				$this->sf->create_record( $object, $obj );
+			}
 		}
 	}
 
@@ -395,13 +409,21 @@ class Localhealth_Salesforce_Sync_Connector {
 	protected function insert_diagnosis( $prescription_id, $api_data ) {
 		$object = 'Diagnosis__C';
 		foreach ( $api_data['dosage_info'] as $data ) {
+			$query      = "SELECT Id FROM Diagnosis__C WHERE Code__c = '{$data['code']}' AND Prescription__c = '{$prescription_id}'";
+			$diagnostic = $this->sf->get_query( $query );
 			$obj = array(
 				'Code__c'         => $data['code'],
 				'Description__c'  => $data['description'],
 				'Qualifier__c'    => $data['qualifier'],
 				'Prescription__c' => $prescription_id,
 			);
-			$this->sf->create_record( $object, $obj );
+			if (  $diagnostic['totalSize'] ) {
+				unset( $obj['Prescription__c'] );
+				unset( $obj['code'] );
+				$this->sf->update_lead( $object, $diagnostic['records'][0]['Id'], $obj );
+			} else {
+				$this->sf->create_record( $object, $obj );
+			}
 		}
 	}
 
@@ -423,8 +445,10 @@ class Localhealth_Salesforce_Sync_Connector {
 				} else {
 					$plan_id = $this->sf->create_record( 'Plan_BIN__c', array( 'Name' => $data['plan_bin'] ) );
 				}
-				update_option( 'new_plan_' . md5( $query ), $plan_id );
+				update_option( 'new_plan_' . md5( $query ), $plan_id, 0 );
 			}
+			$query = "SELECT Id FROM Payer__c WHERE Plan_Bin_Record__c = '{$plan_id}' AND Prescription__c = '{$prescription_id}'";
+			$payer = $this->sf->get_query( $query );
 			$obj = array(
 				'Card_ID__c'                  => $data['card_id'],
 				'Cost_Paid__c'                => $data['cost_paid'],
@@ -433,7 +457,6 @@ class Localhealth_Salesforce_Sync_Connector {
 				'Due_From_Payer__c'           => $data['due_from_payer'],
 				'Group__c'                    => $data['group'],
 				'Patient_Pay_Amount__c'       => $data['pat_pay_amount'],
-				// 'Name' => $data[''],
 				'Person_Code__c'              => $data['person_code'],
 				'Plan_Billing_Status__c'      => $data['plan_bill_status'],
 				'Plan_Billing_Status_Text__c' => $data['plan_bill_status_text'],
@@ -447,7 +470,13 @@ class Localhealth_Salesforce_Sync_Connector {
 				'Tax_Paid__c'                 => $data['tax_paid'],
 				'Prescription__c'             => $prescription_id,
 			);
-			$this->sf->create_record( $object, $obj );
+			if ( $payer['totalSize'] ) {
+				unset( $obj['Prescription__c'] );
+				unset( $obj['Plan_Bin_Record__c'] );
+				$this->sf->update_lead( $object, $payer['records'][0]['Id'], $obj );
+			} else {
+				$this->sf->create_record( $object, $obj );
+			}
 		}
 	}
 
@@ -459,7 +488,9 @@ class Localhealth_Salesforce_Sync_Connector {
 	 */
 	protected function get_patient_contact( $api_data ) {
 		$dob = date( 'Y-m-d', strtotime( $api_data['patient_dob'] ) );
-		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$api_data['patient_first_name']}' and LastName = '{$api_data['patient_last_name']}'";
+		$fname = strtolower( $api_data['patient_first_name'] );
+		$lname = strtolower( $api_data['patient_last_name'] );
+		$query      = "SELECT Id FROM Contact WHERE Birthdate = {$dob} and FirstName = '{$fname}' and LastName = '{$lname}'";
 		$contact_id = get_option( 'contact_' . md5( $query ), 0 );
 		if ( ! $contact_id ) {
 			$results = $this->sf->get_query( $query );
@@ -474,7 +505,7 @@ class Localhealth_Salesforce_Sync_Connector {
 				);
 				$contact_id = $this->sf->create_record( 'Contact', $temp_data );
 			}
-			update_option( 'contact_' . md5( $query ), $contact_id );
+			update_option( 'contact_' . md5( $query ), $contact_id, 0 );
 		}
 		return $contact_id;
 	}

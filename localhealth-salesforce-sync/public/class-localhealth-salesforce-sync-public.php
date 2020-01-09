@@ -108,7 +108,7 @@ class Localhealth_Salesforce_Sync_Public {
 					'wp/v2',
 					'/bestrx/prescription_update',
 					array(
-						'methods'  => array( 'POST', 'GET' ),
+						'methods'  => array( 'POST' ),
 						'callback' => array( $this, 'update_prescription' ),
 					)
 				);
@@ -125,23 +125,59 @@ class Localhealth_Salesforce_Sync_Public {
 	}
 
 	public function update_prescription( WP_REST_Request $request ) {
-		$api    = new Localhealth_Salesforce_Sync_Connector();
 		$params = $request->get_json_params();
+		$enc = new Localhealth_Salesforce_Encryptor();
+		$key = $this->get_ecnryption_key( $params['APIKey'] );
+		if( ! $key ) {
+			return array(
+				'status'  => 'Success',
+				'Message' => 'Invalid API key.' . $params['APIKey'],
+			);
+		}
+		$encrypted = $enc->encrypt( json_encode( $params ), $key );
 
+		global $wpdb;
+
+		$insert_id = $wpdb->insert(
+			'wp_localhealt_info',
+			array(
+				'api_key' => $params['APIKey'],
+				'data' => base64_encode( $encrypted ),
+			)
+		);
+		$last_insert = $wpdb->insert_id;
+		$entry = $wpdb->get_row( 'SELECT * FROM wp_localhealt_info WHERE id != ' . $last_insert . ' order by id limit 1', ARRAY_A );
+		if ( empty( $entry) ) {
+			return array(
+				'status'  => 'Success',
+				'Message' => null,
+				'test'    => $last_insert,
+			);
+		}
+		$dec_key = $this->get_ecnryption_key( $entry['api_key'] );
+		$remove_id = $entry['ID'];
+		$decrypted = json_decode( $enc->decrypt( base64_decode( $entry['data'] ), $dec_key ), true );
+		$api    = new Localhealth_Salesforce_Sync_Connector();
+		$this->send_slack_notification( 0, $decrypted['rx_number'] );
 		try {
-			$id = $api->process_prescription( $params );
+
+			$id = $api->process_prescription( $decrypted );
+
+			// $this->send_slack_notification( 0 );
+			$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
 			return array(
 				'status'  => 'Success',
 				'Message' => null,
 				'test'    => $id,
 			);
 		} catch ( Exception $e ) {
+			$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
+			// $this->send_slack_notification( 0 );
 			if ( false === ( $special_prescription_update = get_transient( 'special_prescription_update' ) ) ) {
 				$special_prescription_update = 'test';
 				set_transient( 'special_prescription_update', $special_prescription_update, 2 * HOUR_IN_SECONDS );
 				wp_mail( 'mitko.kockovski@gmail.com', 'BestRX Prescription record', print_r( $request->get_json_params(), true ) );
 			}
-			// wp_mail('mitko.kockovski@gmail.com','test issue', $e->getMessage() );
 			return array(
 				'status'  => 'Success',
 				'Message' => $e->getMessage(),
@@ -152,6 +188,7 @@ class Localhealth_Salesforce_Sync_Public {
 	public function update_patient( WP_REST_Request $request ) {
 		$api    = new Localhealth_Salesforce_Sync_Connector();
 		$params = $request->get_json_params();
+
 		try {
 			$response = $api->process_patient( $params );
 			return array(
@@ -170,4 +207,37 @@ class Localhealth_Salesforce_Sync_Public {
 			);
 		}
 	}
+
+	protected function send_slack_notification( $type = 0, $pharmacy = '' ){
+		if ( $type ) {
+			$json_data = strtotime('now') . "\n";
+			$json_data .= 'Request ' . $pharmacy .  "\n";
+			$json_data .= '=======' . "\n";
+		} else {
+			$json_data = strtotime('now') . "\n";
+			$json_data .= 'Duplicate waiting ' . $pharmacy .  "\n";
+			$json_data .= '=======' . "\n";
+		}
+		wp_remote_post( 'https://hooks.slack.com/services/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', array(
+			'body' => json_encode( array( 'text' => $json_data ) ),
+		) );
+	}
+
+	public function get_ecnryption_key( $api_key ) {
+		$salesforce_data = get_option( 'salesforce_data' );
+
+		foreach ( $salesforce_data['sf_stores'] as $key => $store ) {
+			if ( $api_key === $store[1] ) {
+				return $store[2];
+			}
+		}
+		return false;
+	}
 }
+/*
+ * CREATE TABLE `wp_localhealt_info` (
+  `ID` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `api_key` text NOT NULL,
+  `data` longtext NOT NULL
+);
+ */

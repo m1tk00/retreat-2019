@@ -120,6 +120,7 @@ class Localhealth_Salesforce_Sync {
 		 * The class responsible for defining all actions that occur in the public-facing
 		 * side of the site.
 		 */
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-localhealth-salesforce-encryptor.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-localhealth-salesforce-sync-public.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-localhealth-salesforce-connector.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-localhealth-salesforce-sync-connector.php';

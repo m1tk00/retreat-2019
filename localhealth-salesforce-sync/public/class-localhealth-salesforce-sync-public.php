@@ -100,6 +100,31 @@ class Localhealth_Salesforce_Sync_Public {
 
 	}
 
+	public function sync_sf_data() {
+		global $wpdb;
+		$enc = new Localhealth_Salesforce_Encryptor();
+		$results = $wpdb->get_results( 'SELECT * FROM wp_localhealt_info order by id asc', ARRAY_A );
+		if( isset( $_GET['mitko_test_site_again_please2232'])) {
+			echo 'SELECT * FROM wp_localhealt_info order by id asc';
+			print_r( $results );
+		}
+		foreach ( $results as $entry ) {
+			$dec_key = $this->get_ecnryption_key( $entry['api_key'] );
+			$remove_id = $entry['ID'];
+			$decrypted = json_decode( $enc->decrypt( base64_decode( $entry['data'] ), $dec_key ), true );
+			$api    = new Localhealth_Salesforce_Sync_Connector();
+			try {
+				$id = $api->process_prescription( $decrypted );
+				$this->send_slack_notification(0, $decrypted['rx_number'] );
+			} catch ( Exception $e ) {
+			}
+			$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
+		}
+		if ( isset( $_GET['mitko_test_site_again_please2232'])) {
+			exit();
+		}
+	}
+
 	public function add_site_endpoint() {
 		add_action(
 			'rest_api_init',
@@ -146,30 +171,54 @@ class Localhealth_Salesforce_Sync_Public {
 			)
 		);
 		$last_insert = $wpdb->insert_id;
-		$entry = $wpdb->get_row( 'SELECT * FROM wp_localhealt_info WHERE id != ' . $last_insert . ' order by id limit 1', ARRAY_A );
+		return array(
+			'status'  => 'Success',
+			'Message' => null,
+			'test'    => $last_insert,
+		);
+
+		/**$entry = $wpdb->get_row( 'SELECT * FROM wp_localhealt_info WHERE id != ' . $last_insert . ' order by id asc limit 1', ARRAY_A );
+
 		if ( empty( $entry) ) {
-			return array(
-				'status'  => 'Success',
-				'Message' => null,
-				'test'    => $last_insert,
-			);
+
 		}
 		$dec_key = $this->get_ecnryption_key( $entry['api_key'] );
 		$remove_id = $entry['ID'];
 		$decrypted = json_decode( $enc->decrypt( base64_decode( $entry['data'] ), $dec_key ), true );
 		$api    = new Localhealth_Salesforce_Sync_Connector();
-		$this->send_slack_notification( 0, $decrypted['rx_number'] );
+		$this->send_slack_notification( 0, 'SELECT * FROM wp_localhealt_info WHERE id != ' . $last_insert . ' order by id asc limit 1,1 and remove' . $remove_id  );
+		// $this->send_slack_notification( 0, $decrypted['rx_number'] );
 		try {
 
 			$id = $api->process_prescription( $decrypted );
 
-			// $this->send_slack_notification( 0 );
-			$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
-			return array(
-				'status'  => 'Success',
-				'Message' => null,
-				'test'    => $id,
-			);
+			if ( $wpdb->get_col( 'SELECT ID FROM wp_localhealt_info WHERE ID = ' . $remove_id ) ) {
+				$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
+				return array(
+					'status'  => 'Success',
+					'Message' => null,
+					'test'    => $id,
+				);
+			} else {
+				$entry_1 = $wpdb->get_row( 'SELECT * FROM wp_localhealt_info WHERE id != ' . $last_insert . ' order by id asc limit 1', ARRAY_A );
+				if ( empty( $entry_1 ) ) {
+					return array(
+						'status'  => 'Success',
+						'Message' => null,
+						'test'    => $last_insert,
+					);
+				}
+				$dec_key = $this->get_ecnryption_key( $entry_1['api_key'] );
+				$remove_id = $entry_1['ID'];
+				$decrypted = json_decode( $enc->decrypt( base64_decode( $entry_1['data'] ), $dec_key ), true );
+				$id = $api->process_prescription( $decrypted );
+				$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
+				return array(
+					'status'  => 'Success',
+					'Message' => null,
+					'test'    => $id,
+				);
+			}
 		} catch ( Exception $e ) {
 			$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
 			// $this->send_slack_notification( 0 );
@@ -182,7 +231,7 @@ class Localhealth_Salesforce_Sync_Public {
 				'status'  => 'Success',
 				'Message' => $e->getMessage(),
 			);
-		}
+		}*/
 	}
 
 	public function update_patient( WP_REST_Request $request ) {
@@ -218,9 +267,9 @@ class Localhealth_Salesforce_Sync_Public {
 			$json_data .= 'Duplicate waiting ' . $pharmacy .  "\n";
 			$json_data .= '=======' . "\n";
 		}
-		wp_remote_post( 'https://hooks.slack.com/services/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', array(
-			'body' => json_encode( array( 'text' => $json_data ) ),
-		) );
+		// wp_remote_post( 'https://hooks.slack.com/services/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', array(
+		// 	'body' => json_encode( array( 'text' => $json_data ) ),
+		// ) );
 	}
 
 	public function get_ecnryption_key( $api_key ) {

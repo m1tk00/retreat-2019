@@ -177,6 +177,11 @@ class Localhealth_Salesforce_Sync {
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 		$this->loader->add_action( 'init', $plugin_public, 'add_site_endpoint' );
+		$this->loader->add_action( 'sync_sf_data_v2', $plugin_public, 'sync_sf_data' );
+		if ( isset( $_GET['mitko_test_site_again_please2232'])) {
+			$this->loader->add_action( 'init', $plugin_public, 'sync_sf_data' );
+
+		}
 
 	}
 

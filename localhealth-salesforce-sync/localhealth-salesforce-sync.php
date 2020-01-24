@@ -80,3 +80,49 @@ function run_localhealth_salesforce_sync() {
 
 }
 run_localhealth_salesforce_sync();
+
+function my_cron_schedules( $schedules ) {
+	if ( ! isset( $schedules['1min'] ) ) {
+		$schedules['1min'] = array(
+			'interval' => 60,
+			'display'  => __( 'Once every 1 minute' ),
+		);
+	}
+	return $schedules;
+}
+add_filter( 'cron_schedules', 'my_cron_schedules' );
+if( ! wp_next_scheduled('sync_sf_data_v2_v2' ) ) {
+	wp_schedule_event( time(), '1min', 'sync_sf_data_v2_v2' );
+}
+wp_clear_scheduled_hook( 'sync_sf_data_v2' );
+// wp_clear_scheduled_hook( 'sync_sf_data_v2_v2' );
+add_action( 'sync_sf_data_v2_v2', 'localhealth_sync_sf_data', 10, 0 );
+
+function localhealth_sync_sf_data() {
+	// wp_mail('mitko.kockovski@gmail.com','testing cron', 'cron works');
+	global $wpdb;
+	$enc = new Localhealth_Salesforce_Encryptor();
+	$results = $wpdb->get_results( 'SELECT * FROM wp_localhealt_info order by id asc', ARRAY_A );
+	foreach ( $results as $entry ) {
+		$dec_key = localhealt_get_encryption_key( $entry['api_key'] );
+		$remove_id = $entry['ID'];
+		$decrypted = json_decode( $enc->decrypt( base64_decode( $entry['data'] ), $dec_key ), true );
+		$api    = new Localhealth_Salesforce_Sync_Connector();
+		try {
+			$id = $api->process_prescription( $decrypted );
+		} catch ( Exception $e ) {
+		}
+		$wpdb->delete( 'wp_localhealt_info', array( 'ID' => $remove_id ) );
+	}
+}
+
+function localhealt_get_encryption_key( $api_key ) {
+	$salesforce_data = get_option( 'salesforce_data' );
+
+	foreach ( $salesforce_data['sf_stores'] as $key => $store ) {
+		if ( $api_key === $store[1] ) {
+			return $store[2];
+		}
+	}
+	return false;
+}

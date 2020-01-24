@@ -396,7 +396,6 @@ class Localhealth_Salesforce_Sync_Connector {
 		} else {
 			$prescriber_id = $doctor['records'][0]['Id'];
 		}
-		echo $prescriber_id;
 		$sf_data['Prescriber__c'] = $prescriber_id;
 		$query                    = "SELECT Id, Transaction_Time__c, Transaction_Date__c FROM Prescription__c WHERE Patient__c = '{$contact_id}' and Rx_Number__c = '{$api_data['rx_number']}' and Fill_Number__c = '{$api_data['fill_number']}'";
 		$prescription_id          = 0;
